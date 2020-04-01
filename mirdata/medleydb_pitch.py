@@ -7,15 +7,7 @@ addressing important shortcomings of existing collections. For each song
 we provide melody f0 annotations as well as instrument activations for
 evaluating automatic instrument recognition.
 
-Details can be found at https://medleydb.weebly.com
-
-
-Attributes:
-    DATA.index (dict): {track_id: track_data}.
-        track_data is a jason data loaded from `index/`
-
-    DATASET_DIR (str): The directory name for MedleyDB melody dataset.
-        Set to `'MedleyDB-Pitch'`.
+For more details, please visit: https://medleydb.weebly.com
 
 """
 from __future__ import absolute_import
@@ -54,21 +46,21 @@ DATA = utils.LargeData('medleydb_pitch_index.json', _load_metadata)
 
 
 class Track(object):
-    """MedleyDB pitch track class
+    """medleydb_pitch Track class
 
     Args:
         track_id (str): track id of the track
-        data_home (str): Local path where the dataset is stored.
+        data_home (str): Local path where the dataset is stored. default=None
             If `None`, looks for the data in the default directory, `~/mir_datasets`
 
     Attributes:
-        track_id (str): track id
-        audio_path (str): track audio path
+        artist (str): artist
+        audio_path (str): path to the audio file
+        genre (str): genre
         instrument (str): instrument of the track
-        title (str): title of the track
-        genre (str): genre of the track
-        pitch (F0Data): pitch annotation
-        audio (np.array, float): tuple of audio data and sample rate
+        pitch_path (str): path to the pitch annotation file
+        title (str): title
+        track_id (str): track id
 
     """
 
@@ -85,6 +77,7 @@ class Track(object):
 
         self._data_home = data_home
         self._track_paths = DATA.index[track_id]
+        self.pitch_path = os.path.join(self._data_home, self._track_paths['pitch'][0])
 
         metadata = DATA.metadata(data_home)
         if metadata is not None and track_id in metadata:
@@ -120,16 +113,33 @@ class Track(object):
 
     @utils.cached_property
     def pitch(self):
-        return _load_pitch(os.path.join(self._data_home, self._track_paths['pitch'][0]))
+        """F0Data: The human-annotated pitch"""
+        return load_pitch(self.pitch_path)
 
     @property
     def audio(self):
-        return librosa.load(self.audio_path, sr=None, mono=True)
+        """(np.ndarray, float): audio signal, sample rate"""
+        return load_audio(self.audio_path)
 
     def to_jams(self):
+        """Jams: the track's data in jams format"""
         return jams_utils.jams_converter(
             f0_data=[(self.pitch, None)], metadata=self._track_metadata
         )
+
+
+def load_audio(audio_path):
+    """Load a MedleyDB audio file.
+
+    Args:
+        audio_path (str): path to audio file
+
+    Returns:
+        y (np.ndarray): the mono audio signal
+        sr (float): The sample rate of the audio file
+
+    """
+    return librosa.load(audio_path, sr=None, mono=True)
 
 
 def download(data_home=None, force_overwrite=False):
@@ -213,7 +223,7 @@ def load(data_home=None):
     return medleydb_pitch_data
 
 
-def _load_pitch(pitch_path):
+def load_pitch(pitch_path):
     if not os.path.exists(pitch_path):
         return None
     times = []

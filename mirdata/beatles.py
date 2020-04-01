@@ -2,18 +2,8 @@
 """Beatles Dataset Loader
 
 The Beatles Dataset includes beat and metric position, chord, key, and segmentation
-annotations for 179 Beatles songs. Details can be found in http://matthiasmauch.net/_pdf/mauch_omp_2009.pdf
-
-
-Attributes:
-    DATASET_DIR (str): The directory name for Beatles dataset. Set to `'Beatles'`.
-
-    DATA.index (dict): {track_id: track_data}.
-        track_data is a jason data loaded from `index/`
-
-    ANNOTATIONS_REMOTE (RemoteFileMetadata (namedtuple)): metadata
-        of Beatles dataset. It includes the annotation file name, annotation
-        file url, and checksum of the file.
+annotations for 179 Beatles songs. Details can be found in http://matthiasmauch.net/_pdf/mauch_omp_2009.pdf and
+http://isophonics.net/content/reference-annotations-beatles.
 
 """
 import csv
@@ -45,13 +35,13 @@ class Track(object):
             If `None`, looks for the data in the default directory, `~/mir_datasets`
 
     Attributes:
-        track_id (str): track id
         audio_path (str): track audio path
+        beats_path (str): beat annotation path
+        chords_path (str): chord annotation path
+        keys_path (str): key annotation path
+        sections_path (str): sections annotation path
         title (str): title of the track
-        beats (BeatData): beat annotation
-        chords (ChordData): chords annotation
-        key (KeyData): key annotation
-        sections (SectionData): sections annotation
+        track_id (str): track id
 
     """
 
@@ -66,7 +56,16 @@ class Track(object):
 
         self._data_home = data_home
         self._track_paths = DATA.index[track_id]
-
+        self.beats_path = utils.none_path_join(
+            [self._data_home, self._track_paths['beat'][0]]
+        )
+        self.chords_path = os.path.join(self._data_home, self._track_paths['chords'][0])
+        self.keys_path = utils.none_path_join(
+            [self._data_home, self._track_paths['keys'][0]]
+        )
+        self.sections_path = os.path.join(
+            self._data_home, self._track_paths['sections'][0]
+        )
         self.audio_path = os.path.join(self._data_home, self._track_paths['audio'][0])
 
         self.title = os.path.basename(self._track_paths['sections'][0]).split('.')[0]
@@ -83,37 +82,31 @@ class Track(object):
 
     @utils.cached_property
     def beats(self):
-        if not self._track_paths['beat'][0] is None:
-            return _load_beats(
-                os.path.join(self._data_home, self._track_paths['beat'][0])
-            )
-        return None
+        """BeatData: human-labeled beat annotation"""
+        return load_beats(self.beats_path)
 
     @utils.cached_property
     def chords(self):
-        return _load_chords(
-            os.path.join(self._data_home, self._track_paths['chords'][0])
-        )
+        """ChordData: chord annotation"""
+        return load_chords(self.chords_path)
 
     @utils.cached_property
     def key(self):
-        if not self._track_paths['keys'][0] is None:
-            return _load_key(
-                os.path.join(self._data_home, self._track_paths['keys'][0])
-            )
-        return None
+        """KeyData: key annotation"""
+        return load_key(self.keys_path)
 
     @utils.cached_property
     def sections(self):
-        return _load_sections(
-            os.path.join(self._data_home, self._track_paths['sections'][0])
-        )
+        """SectionData: section annotation"""
+        return load_sections(self.sections_path)
 
     @property
     def audio(self):
-        return librosa.load(self.audio_path, sr=None, mono=True)
+        """(np.ndarray, float): audio signal, sample rate"""
+        return load_audio(self.audio_path)
 
     def to_jams(self):
+        """Jams: the track's data in jams format"""
         return jams_utils.jams_converter(
             beat_data=[(self.beats, None)],
             section_data=[(self.sections, None)],
@@ -121,6 +114,20 @@ class Track(object):
             key_data=[(self.key, None)],
             metadata={'artist': 'The Beatles', 'title': self.title},
         )
+
+
+def load_audio(audio_path):
+    """Load a Beatles audio file.
+
+    Args:
+        audio_path (str): path to audio file
+
+    Returns:
+        y (np.ndarray): the mono audio signal
+        sr (float): The sample rate of the audio file
+
+    """
+    return librosa.load(audio_path, sr=None, mono=True)
 
 
 def download(data_home=None, force_overwrite=False):
@@ -210,11 +217,14 @@ def load(data_home=None):
     return beatles_data
 
 
-def _load_beats(beats_path):
-    """Private function to load Beatles format beat data from a file
+def load_beats(beats_path):
+    """Load Beatles format beat data from a file
 
     Args:
-        beats_path (str):
+        beats_path (str): path to beat annotation file
+
+    Returns:
+        (utils.BeatData): loaded beat data
 
     """
     if beats_path is None or not os.path.exists(beats_path):
@@ -238,11 +248,14 @@ def _load_beats(beats_path):
     return beat_data
 
 
-def _load_chords(chords_path):
-    """Private function to load Beatles format chord data from a file
+def load_chords(chords_path):
+    """Load Beatles format chord data from a file
 
     Args:
-        chords_path (str):
+        chords_path (str): path to chord annotation file
+
+    Returns:
+        (utils.ChordData): loaded chord data
 
     """
     if chords_path is None or not os.path.exists(chords_path):
@@ -263,18 +276,21 @@ def _load_chords(chords_path):
     return chord_data
 
 
-def _load_key(key_path):
-    """Private function to load Beatles format key data from a file
+def load_key(keys_path):
+    """Load Beatles format key data from a file
 
     Args:
-        key_path (str):
+        keys_path (str): path to key annotation file
+
+    Returns:
+        (utils.KeyData): loaded key data
 
     """
-    if key_path is None or not os.path.exists(key_path):
+    if keys_path is None or not os.path.exists(keys_path):
         return None
 
     start_times, end_times, keys = [], [], []
-    with open(key_path, 'r') as fhandle:
+    with open(keys_path, 'r') as fhandle:
         reader = csv.reader(fhandle, delimiter='\t')
         for line in reader:
             if line[2] == 'Key':
@@ -287,11 +303,14 @@ def _load_key(key_path):
     return key_data
 
 
-def _load_sections(sections_path):
-    """Private function to load Beatles format sections data from a file
+def load_sections(sections_path):
+    """Load Beatles format section data from a file
 
     Args:
-        sections_path (str):
+        sections_path (str): path to section annotation file
+
+    Returns:
+        (utils.SectionData): loaded section data
 
     """
     if sections_path is None or not os.path.exists(sections_path):

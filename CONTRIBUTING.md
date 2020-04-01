@@ -5,7 +5,7 @@
 First, check out the repository from Github. (That's `git clone git@github.com:mir-dataset-loaders/mirdata.git`)
 
 Then, install [pyenv](https://github.com/pyenv/pyenv#installation) to manage your Python versions.
-You'll want to install Python 2.7.11, and the latest versions of Python 3.6 and 3.7
+You'll want to install the latest versions of Python 3.6 and 3.7
 
 Once pyenv and the three versions of Python are installed, install [tox](https://tox.readthedocs.io/en/latest/), our test runner.
 
@@ -14,14 +14,35 @@ Finally, run tox with `tox`.  All tests should pass!
 
 ## Contributing a new dataset loader
 
-To add a new dataset loader:
 
-1. Create a script in `scripts/`, e.g. `make_my_dataset_index.py`, which generates an index file. (See below for what an index file is!)
-2. Run the script on the canonical version of the dataset and save the index in `mirdata/indexes/` e.g. `my_dataset_index.json`. (Also see below for what we mean by "canonical"!)
+### Dataset checklist
+
+To add a new dataset loader you should:
+
+1. Create a script in `scripts/`, e.g. `make_my_dataset_index.py`, which generates an index file. (See below for what an index file is)
+2. Run the script on the canonical version of the dataset and save the index in `mirdata/indexes/` e.g. `my_dataset_index.json`. (Also see below for what we mean by "canonical") 
 3. Create a module in mirdata, e.g. `mirdata/my_dataset.py`
 4. Create tests for your loader in `tests/`, e.g. `test_my_dataset.py`
 5. Add your module to `docs/source/mirdata.rst`
 6. Add the module to `mirdata/__init__.py`
+7. Add the module to the table in the `README.md` file, section `Currently supported datasets`
+
+If your dataset **is not fully downloadable** there are two extra steps you should follow:
+1. Contacting the mirdata organizers by opening an issue or PR so we can discuss how to proceed with the closed dataset.
+2. Show that the version used to create the checksum is the "canonical" one, either by getting the version from the dataset creator, or by verifying equivalence with several other copies of the dataset.
+
+To reduce friction, we will make commits on top of contributors pull requests by default unless they use the `please-do-not-edit` flag.
+
+### Dataset description:
+
+Please include the following information at the top level docstring for the dataset's module `my_dataset.py`:
+
+1. Describe annotations included in the dataset
+2. Indicate the size of the datasets (e.g. number files and duration, hours)
+3. Mention the origin of the dataset (e.g. creator, institution)
+4. Describe the type of music included in the dataset
+5. Indicate any relevant papers related to the dataset
+6. Include a description about how the data can be accessed and the license it uses (if applicable)
 
 ### Canonical datasets
 Whenever possible, this should be the official release of the dataset as published by the dataset creator/s.
@@ -102,17 +123,11 @@ You can also remove any comments beginning with `# --`
 # -*- coding: utf-8 -*-
 """Example Dataset Loader
 
-[Description of the dataset]
+[Description of the dataset. Write about the number of files, origin of the
+music, genre, relevant papers, openness/license, creator, and annotation type.]
 
-[Link to any relevant websites]
+For more details, please visit: [website]
 
-Attributes:
-    DATASET_DIR (str): The directory name for Example dataset. Set to `'Example'`.
-
-    DATA.index (dict): {track_id: track_data}.
-        track_data is a `Track` namedtuple.
-
-    DATA.metadata (dict): Dictionary of track metadata
 """
 
 from __future__ import absolute_import
@@ -157,6 +172,9 @@ DATA = utils.LargeData('example_index.json', _load_metadata)
 
 class Track(object):
     """Example track class
+    # -- YOU CAN AUTOMATICALLY GENERATE THIS DOCSTRING BY CALLING THE SCRIPT:
+    # -- `scripts/print_track_docstring.py my_dataset`
+    # -- note that you'll first need to have a test track (see "Adding tests to your dataset" below)
 
     Args:
         track_id (str): track id of the track
@@ -184,6 +202,8 @@ class Track(object):
         # -- add any dataset specific attributes here
         self.audio_path = os.path.join(
             self._data_home, self._track_paths['audio'][0])
+        self.annotation_path = os.path.join(
+            self._data_home, self._track_paths['annotation'][0])
 
         # -- if the user doesn't have a metadata file, load None
         metadata = DATA.metadata(data_home)
@@ -206,35 +226,44 @@ class Track(object):
     # -- series data loaded from a file a cached property
     @utils.cached_property
     def annotation(self):
-        return _load_annotation(os.path.join(
-            self._data_home, self._track_paths['annotation'][0]))
+        """output type: description of output"""
+        return load_annotation(self.annotation_path)
 
     # -- `audio` will behave like an attribute, but it will only be loaded
     # -- when someone accesses it and it won't be stored. By default, we make
     # -- any memory heavy information (like audio) properties
     @property
     def audio(self):
-        """Load audio.
-
-        Returns:
-            audio (np.array): audio. size of `(N, )`
-            sr (int): sampling rate of the audio file
-        """
-        # -- By default we load to mono
-        # -- change this if it doesn't make sense for your dataset.
-        audio, sr = librosa.load(self.audio_path, sr=None, mono=True)
-        return audio, sr
+        """(np.ndarray, float): DESCRIPTION audio signal, sample rate"""
+        return load_audio(self.audio_path)
 
     # -- we use the to_jams function to convert all the annotations in the JAMS format.
     # -- The converter takes as input all the annotations in the proper format (e.g. beats
     # -- will be fed as beat_data=[(self.beats, None)], see jams_utils), and returns a jams
     # -- object with the annotations.
     def to_jams(self):
+        """Jams: the track's data in jams format"""
         return jams_utils.jams_convertrer(
             annotation_data=[(self.annotation, None)],
             metadata=metadata},
         )
 
+
+def load_audio(audio_path):
+    """Load a Example audio file.
+
+    Args:
+        audio_path (str): path to audio file
+
+    Returns:
+        y (np.ndarray): the mono audio signal
+        sr (float): The sample rate of the audio file
+
+    """
+    # -- for example, the code below. This should be dataset specific!
+    # -- By default we load to mono
+    # -- change this if it doesn't make sense for your dataset.
+    return librosa.load(audio_path, sr=None, mono=True)
 
 
 def download(data_home=None, force_overwrite=False):
@@ -260,7 +289,7 @@ def download(data_home=None, force_overwrite=False):
         # -- this function also untarrs them
         tar_downloads=[...],
         # -- download any freely accessible uncompressed files by adding them to this list
-        files_downloads=[...],
+        file_downloads=[...],
         # -- if you need to give the user any instructions, such as how to download
         # -- a dataset which is not freely availalbe, put them here
         print_message=""
@@ -320,7 +349,7 @@ def load(data_home=None):
 
 
 # -- Write any necessary loader functions for loading the dataset's data
-def _load_annotation(annotation_path):
+def load_annotation(annotation_path):
     if not os.path.exists(annotation_path):
         return None
     with open(annotation_path, 'r') as fhandle:
@@ -359,4 +388,4 @@ Bibtex format citations/s here
   a. Include all audio and annotation files for one track of the dataset
   b. For each audio/annotation file, reduce the audio length to a few seconds and remove all but a few of the annotations.
   c. If the dataset has a metadata file, reduce the length to a few lines to make it trival to test.
-2. Test all of the dataset specific code, e.g. the Track object, any of the load functions, and so forth. See the ikala dataset tests (`tests/test_ikala.py`) for reference.
+2. Test all of the dataset specific code, e.g. the public attributes of the Track object, the load functions and any other custom functions you wrote. See the ikala dataset tests (`tests/test_ikala.py`) for a reference.

@@ -21,15 +21,6 @@ Each of these clips contains a single instrument among a taxonomy of eight:
 The Medley-solos-DB dataset is the dataset that is used in the benchmarks of
 musical instrument recognition in the publications of Lostanlen and Cella
 (ISMIR 2016) and Andén et al. (IEEE TSP 2019).
-
-Attributes:
-    DATA.index (dict): {track_id: track_data}.
-        track_id is a JSON data loaded from 'index/'
-
-    DATASET_DIR (str): The directory name for Medley-solos-DB.
-        Set to `'Medley-solos-DB'`.
-
-    DATA.metadata (dict): The metadata of Medley-solos-DB.
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -90,18 +81,21 @@ DATA = utils.LargeData("medley_solos_db_index.json", _load_metadata)
 
 
 class Track(object):
-    """Medley-solos-DB track class
+    """medley_solos_db Track class
 
     Args:
         track_id (str): track id of the track
-        data_home (str): Local path where the dataset is stored.
+        data_home (str): Local path where the dataset is stored. default=None
             If `None`, looks for the data in the default directory, `~/mir_datasets`
 
     Attributes:
+        audio_path (str): path to the track's audio file
         instrument (str): instrument encoded by its English name
         instrument_id (int): instrument encoded as an integer
         song_id (int): song encoded as an integer
         subset (str): either equal to 'train', 'validation', or 'test'
+        track_id (str): track id
+
     """
 
     def __init__(self, track_id, data_home=None):
@@ -147,10 +141,26 @@ class Track(object):
 
     @property
     def audio(self):
-        return librosa.load(self.audio_path, sr=22050, mono=True)
+        """(np.ndarray, float): audio signal, sample rate"""
+        return load_audio(self.audio_path)
 
     def to_jams(self):
+        """Jams: the track's data in jams format"""
         return jams_utils.jams_converter(metadata=self._track_metadata)
+
+
+def load_audio(audio_path):
+    """Load a Medley Solos DB audio file.
+
+    Args:
+        audio_path (str): path to audio file
+
+    Returns:
+        y (np.ndarray): the mono audio signal
+        sr (float): The sample rate of the audio file
+
+    """
+    return librosa.load(audio_path, sr=22050, mono=True)
 
 
 def download(data_home=None):

@@ -7,17 +7,7 @@ addressing important shortcomings of existing collections. For each song
 we provide melody f0 annotations as well as instrument activations for
 evaluating automatic instrument recognition.
 
-Details can be found at https://medleydb.weebly.com
-
-
-Attributes:
-    DATA.index (dict): {track_id: track_data}.
-        track_data is a jason data loaded from `index/`
-
-    DATASET_DIR (str): The directory name for MedleyDB melody dataset.
-        Set to `'MedleyDB-Melody'`.
-
-    DATA.metadata (None): TODO
+For more details, please visit: https://medleydb.weebly.com
 
 """
 from __future__ import absolute_import
@@ -56,25 +46,25 @@ DATA = utils.LargeData('medleydb_melody_index.json', _load_metadata)
 
 
 class Track(object):
-    """MedleyDB melody Track class
+    """medleydb_melody Track class
 
     Args:
-        track_id (str): Track id of the track
-        data_home (str): Local path where the dataset is stored.
+        track_id (str): track id of the track
+        data_home (str): Local path where the dataset is stored. default=None
             If `None`, looks for the data in the default directory, `~/mir_datasets`
 
     Attributes:
-        track_id (str): Track id
-        audio_path (str): Track audio path
-        artist (str): Artist of the track
-        title (str): Title of the track
-        genre (str): Genre of the track
+        artist (str): artist
+        audio_path (str): path to the audio file
+        genre (str): genre
         is_excerpt (bool): True if the track is an excerpt
         is_instrumental (bool): True of the track does not contain vocals
+        melody1_path (str): path to the melody1 annotation file
+        melody2_path (str): path to the melody2 annotation file
+        melody3_path (str): path to the melody3 annotation file
         n_sources (int): Number of instruments in the track
-        melody1 (F0Data): The pitch of the single most predominant source (often the voice)
-        melody2 (F0Data): The pitch of the predominant source for each point in time
-        melody3 (F0Data): The pitch of any melodic source. Allows for more than one f0 value at a time.
+        title (str): title
+        track_id (str): track id
 
     """
 
@@ -91,6 +81,15 @@ class Track(object):
 
         self._data_home = data_home
         self._track_paths = DATA.index[track_id]
+        self.melody1_path = os.path.join(
+            self._data_home, self._track_paths['melody1'][0]
+        )
+        self.melody2_path = os.path.join(
+            self._data_home, self._track_paths['melody2'][0]
+        )
+        self.melody3_path = os.path.join(
+            self._data_home, self._track_paths['melody3'][0]
+        )
 
         metadata = DATA.metadata(data_home)
         if metadata is not None and track_id in metadata:
@@ -120,7 +119,7 @@ class Track(object):
             + "is_instrumental={}, n_sources={}, "
             + "melody1=F0Data('times', 'frequencies', confidence'), "
             + "melody2=F0Data('times', 'frequencies', confidence'), "
-            + "melody3=F0Data('times', 'frequencies', confidence'))"
+            + "melody3=MultipitchData('times', 'frequencies', confidence'))"
         )
         return repr_string.format(
             self.track_id,
@@ -135,35 +134,45 @@ class Track(object):
 
     @utils.cached_property
     def melody1(self):
-        return _load_melody(
-            os.path.join(self._data_home, self._track_paths['melody1'][0])
-        )
+        """F0Data: The pitch of the single most predominant source (often the voice)"""
+        return load_melody(self.melody1_path)
 
     @utils.cached_property
     def melody2(self):
-        return _load_melody(
-            os.path.join(self._data_home, self._track_paths['melody2'][0])
-        )
+        """F0Data: The pitch of the predominant source for each point in time"""
+        return load_melody(self.melody2_path)
 
     @utils.cached_property
     def melody3(self):
-        return _load_melody3(
-            os.path.join(self._data_home, self._track_paths['melody3'][0])
-        )
+        """MultipitchData: The pitch of any melodic source. Allows for more than one f0 value at a time."""
+        return load_melody3(self.melody3_path)
 
     @property
     def audio(self):
-        return librosa.load(self.audio_path, sr=None, mono=True)
+        """(np.ndarray, float): audio signal, sample rate"""
+        return load_audio(self.audio_path)
 
     def to_jams(self):
+        """Jams: the track's data in jams format"""
+        # jams does not support multipitch, so we skip melody3
         return jams_utils.jams_converter(
-            f0_data=[
-                (self.melody1, 'melody1'),
-                (self.melody2, 'melody2'),
-                (self.melody3, 'melody3'),
-            ],
+            f0_data=[(self.melody1, 'melody1'), (self.melody2, 'melody2')],
             metadata=self._track_metadata,
         )
+
+
+def load_audio(audio_path):
+    """Load a MedleyDB audio file.
+
+    Args:
+        audio_path (str): path to audio file
+
+    Returns:
+        y (np.ndarray): the mono audio signal
+        sr (float): The sample rate of the audio file
+
+    """
+    return librosa.load(audio_path, sr=None, mono=True)
 
 
 def download(data_home=None):
@@ -246,7 +255,7 @@ def load(data_home=None):
     return medleydb_melody_data
 
 
-def _load_melody(melody_path):
+def load_melody(melody_path):
     if not os.path.exists(melody_path):
         return None
     times = []
@@ -264,21 +273,21 @@ def _load_melody(melody_path):
     return melody_data
 
 
-def _load_melody3(melody_path):
+def load_melody3(melody_path):
     if not os.path.exists(melody_path):
         return None
     times = []
-    freqs = []
+    freqs_list = []
+    conf_list = []
     with open(melody_path, 'r') as fhandle:
         reader = csv.reader(fhandle, delimiter=',')
         for line in reader:
             times.append(float(line[0]))
-            freqs.append([float(v) for v in line[1:]])
+            freqs_list.append([float(v) for v in line[1:]])
+            conf_list.append([float(float(v) > 0) for v in line[1:]])
 
     times = np.array(times)
-    freqs = np.array(freqs)
-    confidence = (freqs > 0).astype(float)
-    melody_data = utils.F0Data(times, freqs, confidence)
+    melody_data = utils.MultipitchData(times, freqs_list, conf_list)
     return melody_data
 
 

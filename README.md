@@ -1,5 +1,5 @@
 # mirdata
-common loaders for mir datasets. Find the API documentation [here](https://mirdata.readthedocs.io/en/latest/).
+common loaders for Music Information Retrieval (MIR) datasets. Find the API documentation [here](https://mirdata.readthedocs.io/en/latest/).
 
 [![CircleCI](https://circleci.com/gh/mir-dataset-loaders/mirdata.svg?style=svg)](https://circleci.com/gh/mir-dataset-loaders/mirdata)
 [![codecov](https://codecov.io/gh/mir-dataset-loaders/mirdata/branch/master/graph/badge.svg)](https://codecov.io/gh/mir-dataset-loaders/mirdata)
@@ -12,6 +12,27 @@ This library provides tools for working with common MIR datasets, including tool
 * validating that the files for a dataset are all present
 * loading annotation files to a common format, consistent with the format required by [mir_eval](https://github.com/craffel/mir_eval)
 * parsing track level metadata for detailed evaluations
+
+![](mirdata_example.gif)
+
+#### Currently supported datasets 
+
+* [Beatles](http://isophonics.net/content/reference-annotations-beatles)   
+* [DALI](https://github.com/gabolsgabs/DALI)    
+* [GuitarSet](http://github.com/marl/guitarset/) 
+* [GTZAN genre](http://marsyas.info/downloads/datasets.html) 
+* [Ikala](http://mac.citi.sinica.edu.tw/ikala/) 
+* [MedleyDB Melody](https://medleydb.weebly.com/) 
+* [MedleyDB Pitch](https://medleydb.weebly.com/) 
+* [Medley-solos-DB](https://mirdata.readthedocs.io/en/latest/source/mirdata.html#module-mirdata.medley_solos_db) 
+* [ORCHSET](https://zenodo.org/record/1289786#.XREpzaeZPx6) 
+* [RWC Classical](https://staff.aist.go.jp/m.goto/RWC-MDB/rwc-mdb-c.html) 
+* [RWC Jazz](https://staff.aist.go.jp/m.goto/RWC-MDB/rwc-mdb-j.html) 
+* [RWC Popular](https://staff.aist.go.jp/m.goto/RWC-MDB/rwc-mdb-p.html) 
+* [Salami](https://github.com/bmcfee/salami-data-public/tree/hierarchy-corrections) 
+* [TinySOL](https://www.orch-idea.org/) 
+
+For more information about these datasets see [this table](https://mirdata.readthedocs.io/en/latest/).
 
 ## Installation
 
@@ -41,39 +62,36 @@ in International Society for Music Information Retrieval (ISMIR) Conference, 201
 }
 ```
 
-## Dataset Location
-By default, all datasets tracked by this library are stored in `~/mir_datasets`,
-(defined as `MIR_DATASETS_DIR` in `mirdata/__init__.py`).
-Data can alternatively be stored in another location by specifying `data_home`
-within a relevant function, e.g. `mirdata.orchset.download(data_home='my_custom_path')`
+## Contributing a new dataset loader
+To add datasets and code, please see [CONTRIBUTING.md](https://github.com/mir-dataset-loaders/mirdata/blob/master/CONTRIBUTING.md)
 
 
 ## Examples
 
 ### Download the Orchset Dataset
 ```python
-import mirdata
+import mirdata.orchset
 
 mirdata.orchset.download()
 ```
 
 ### Validate the data
 ```python
-import mirdata
+import mirdata.orchset
 
 mirdata.orchset.validate()
 ```
 
 ### Load the Orchset Dataset
 ```python
-import mirdata
+import mirdata.orchset
 
 orchset_data = mirdata.orchset.load()
 ```
 
 ### See what data are available for a track
 ```python
-import mirdata
+import mirdata.orchset
 
 orchset_ids = mirdata.orchset.track_ids()
 orchset_data = mirdata.orchset.load()
@@ -104,7 +122,7 @@ print(example_track)
 ### Evaluate a melody extraction algorithm on Orchset
 ```python
 import mir_eval
-import mirdata
+import mirdata.orchset
 import numpy as np
 import sox
 
@@ -139,5 +157,9 @@ for track_id, track_data in orchset_data.items():
         orchset_scores[track_id]
 ```
 
-## Contributing a new dataset loader
-To add datasets and code, please see [CONTRIBUTING.md](https://github.com/mir-dataset-loaders/mirdata/blob/master/CONTRIBUTING.md)
+
+## Dataset Location
+By default, all datasets tracked by this library are stored in `~/mir_datasets`,
+(defined as `MIR_DATASETS_DIR` in `mirdata/__init__.py`).
+Data can alternatively be stored in another location by specifying `data_home`
+within a relevant function, e.g. `mirdata.orchset.download(data_home='my_custom_path')`

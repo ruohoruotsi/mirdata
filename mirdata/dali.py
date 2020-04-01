@@ -1,19 +1,14 @@
 # -*- coding: utf-8 -*-
 """DALI Dataset Loader
 
-DALI Dataset.
+DALI contains 5358 audio files with their time-aligned vocal melody.
+It also contains time-aligned lyrics at four levels of granularity: notes,
+words, lines, and paragraphs.
 
-Details can be found at https://github.com/gabolsgabs/DALI
+For each song, DALI also provides additional metadata: genre, language, musician,
+album covers, or links to video clips.
 
-Attributes:
-    DATASET_DIR (str): The directory name for DALI dataset. Set to `'DALI'`.
-
-    DATA.index (dict): {track_id: track_data}.
-        track_data is a jason data loaded from `index/`
-
-    DATA.metadata (dict): #TODO
-
-
+For more details, please visit: https://github.com/gabolsgabs/DALI
 """
 
 from __future__ import absolute_import
@@ -69,18 +64,21 @@ class Track(object):
             If `None`, looks for the data in the default directory, `~/mir_datasets`
 
     Attributes:
-        track_id (str): track id
-        audio_path (str): track audio path
-        artist
-        title
-        dataset_version (float): dali version
-        ground-truth (bool): if it is part of ground-truth or not
-        scorea: {'NCC': , 'manual'},
-        audio_metadata: {'url': , 'working': },
-        album:,
-        release_date:,
-        language:,
-        audio:,
+        album (str): the track's album
+        annotation_path (str): path to the track's annotation file
+        artist (str): the track's artist
+        audio_path (str): path to the track's audio file
+        audio_url (str): youtube ID
+        dataset_version (int): dataset annotation version
+        ground_truth (bool): True if the annotation is verified
+        language (str): sung language
+        release_date (str): year the track was released
+        scores_manual (int): TODO
+        scores_ncc (float): TODO
+        title (str): the track's title
+        track_id (str): the unique track id
+        url_working (bool): True if the youtube url was valid
+
     """
 
     def __init__(self, track_id, data_home=None):
@@ -93,6 +91,9 @@ class Track(object):
         self.track_id = track_id
         self._data_home = data_home
         self._track_paths = DATA.index[track_id]
+        self.annotation_path = os.path.join(
+            self._data_home, self._track_paths['annot'][0]
+        )
 
         metadata = DATA.metadata(data_home)
         if metadata is not None and track_id in metadata:
@@ -118,6 +119,19 @@ class Track(object):
             self.audio_path = os.path.join(
                 self._data_home, self._track_paths['audio'][0]
             )
+        else:
+            self.audio_url = None
+            self.url_working = None
+            self.ground_truth = None
+            self.artist = None
+            self.title = None
+            self.dataset_version = None
+            self.scores_ncc = None
+            self.scores_manual = None
+            self.album = None
+            self.release_date = None
+            self.language = None
+            self.audio_path = None
 
     def __repr__(self):
         repr_string = (
@@ -143,37 +157,51 @@ class Track(object):
 
     @utils.cached_property
     def notes(self):
-        return _load_annotations_granularity(
-            os.path.join(self._data_home, self._track_paths['annot'][0]), 'notes'
-        )
+        """NoteData: note-aligned lyrics"""
+        return load_annotations_granularity(self.annotation_path, 'notes')
 
     @utils.cached_property
     def words(self):
-        return _load_annotations_granularity(
-            os.path.join(self._data_home, self._track_paths['annot'][0]), 'words'
-        )
+        """LyricData: word-aligned lyric"""
+        return load_annotations_granularity(self.annotation_path, 'words')
 
     @utils.cached_property
     def lines(self):
-        return _load_annotations_granularity(
-            os.path.join(self._data_home, self._track_paths['annot'][0]), 'lines'
-        )
+        """LyricData: line-aligned lyrics"""
+        return load_annotations_granularity(self.annotation_path, 'lines')
 
     @utils.cached_property
     def paragraphs(self):
-        return _load_annotations_granularity(
-            os.path.join(self._data_home, self._track_paths['annot'][0]), 'paragraphs'
-        )
+        """LyricData: paragraph-aligned lyrics"""
+        return load_annotations_granularity(self.annotation_path, 'paragraphs')
 
     @utils.cached_property
     def annotation_object(self):
-        return _load_annotations_class(
-            os.path.join(self._data_home, self._track_paths['annot'][0])
-        )
+        """DALI.Annotations: DALI Annotations object"""
+        return load_annotations_class(self.annotation_path)
 
     @property
     def audio(self):
-        return librosa.load(self.audio_path, sr=None, mono=True)
+        """(np.ndarray, float): audio signal, sample rate"""
+        return load_audio(self.audio_path)
+
+    def to_jams(self):
+        """(Not Implemented) Jams: the track's data in jams format"""
+        raise NotImplementedError
+
+
+def load_audio(audio_path):
+    """Load a DALI audio file.
+
+    Args:
+        audio_path (str): path to audio file
+
+    Returns:
+        y (np.ndarray): the mono audio signal
+        sr (float): The sample rate of the audio file
+
+    """
+    return librosa.load(audio_path, sr=None, mono=True)
 
 
 def download(data_home=None):
@@ -261,7 +289,17 @@ def load(data_home=None):
     return dali_data
 
 
-def _load_annotations_granularity(annotations_path, granularity):
+def load_annotations_granularity(annotations_path, granularity):
+    """Load annotations at the specified level of granularity
+
+    Args:
+        annotations_path (str): path to a DALI annotation file
+        granularity (str): one of 'notes', 'words', 'lines', 'paragraphs'
+
+    Returns:
+        NoteData for granularity='notes' or LyricData otherwise
+
+    """
     if not os.path.exists(annotations_path):
         return None
     try:
@@ -280,9 +318,7 @@ def _load_annotations_granularity(annotations_path, granularity):
         ends.append(round(annot['time'][1], 3))
         text.append(annot['text'])
     if granularity == 'notes':
-        annotation = utils.NoteData(
-            np.array(begs), np.array(ends), np.array(notes), None
-        )
+        annotation = utils.NoteData(np.array([begs, ends]).T, np.array(notes), None)
     else:
         annotation = utils.LyricData(
             np.array(begs), np.array(ends), np.array(text), None
@@ -290,7 +326,16 @@ def _load_annotations_granularity(annotations_path, granularity):
     return annotation
 
 
-def _load_annotations_class(annotations_path):
+def load_annotations_class(annotations_path):
+    """Load full annotations into the DALI class object
+
+    Args:
+        annotations_path (str): path to a DALI annotation file
+
+    Returns:
+        DALI annotations object
+
+    """
     if not os.path.exists(annotations_path):
         return None
     try:
